@@ -9,7 +9,7 @@ golang protobuf doesn't support custom tags to generated structs. this plugin he
 ## install
 
 ```shell
-git clone https://github.com/qianlnk/protobuf.git $GOPATH/src/github.com/golang/
+git clone https://github.com/qianlnk/protobuf.git $GOPATH/src/github.com/golang/protobuf
 go install $GOPATH/src/github.com/golang/protobuf/protoc-gen-go
 ```
 

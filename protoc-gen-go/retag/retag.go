@@ -2,12 +2,11 @@ package retag
 
 import (
 	"bufio"
-
-	"os"
-
-	"strings"
-
 	"bytes"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/golang/protobuf/protoc-gen-go/generator"
 )
@@ -17,8 +16,10 @@ func init() {
 }
 
 type retag struct {
-	gen  *generator.Generator
-	tags map[string]string
+	gen         *generator.Generator
+	tags        map[string]string
+	fieldMaxLen int
+	tagMaxLen   int
 }
 
 // Name returns the name of this plugin, "settag"
@@ -60,7 +61,7 @@ func (r *retag) getStructTags(filename string) {
 			break
 		}
 
-		if strings.HasPrefix(strings.Trim(string(line), " "), "/*") {
+		if strings.HasPrefix(strings.TrimSpace(string(line)), "/*") {
 			comment = true
 		}
 
@@ -73,9 +74,9 @@ func (r *retag) getStructTags(filename string) {
 			continue
 		}
 
-		if strings.HasPrefix(strings.Trim(string(line), " "), "message") {
+		if strings.HasPrefix(strings.TrimSpace(string(line)), "message") {
 			begin = true
-			msgName = strings.Split(string(line), " ")[1]
+			msgName = strings.Fields(string(line))[1]
 			continue
 		}
 
@@ -85,12 +86,23 @@ func (r *retag) getStructTags(filename string) {
 		}
 
 		if begin == true {
-			if strings.HasPrefix(strings.Trim(string(line), " "), "//") {
+			if strings.HasPrefix(strings.TrimSpace(string(line)), "//") {
 				continue
 			}
 
 			k, v := getFieldTag(string(line), msgName)
 			r.tags[k] = v
+
+			if len(strings.Split(k, ".")[1]) > r.fieldMaxLen {
+				r.fieldMaxLen = len(strings.Split(k, ".")[1])
+			}
+
+			tags := strings.Fields(v)
+			for _, tag := range tags {
+				if len(strings.Split(tag, ":")[1])-2 > r.tagMaxLen {
+					r.tagMaxLen = len(strings.Split(tag, ":")[1]) - 2
+				}
+			}
 		}
 	}
 }
@@ -113,9 +125,10 @@ func getFieldTag(line string, msgName string) (field string, tag string) {
 		}
 	}
 
-	tag = strings.Trim(tag, " ")
+	tag = strings.TrimSpace(tag)
 	tag = strings.Trim(tag, "`")
 	tag = trimInside(tag)
+
 	return
 }
 
@@ -151,7 +164,7 @@ func (r *retag) retag() {
 			break
 		}
 
-		if strings.HasPrefix(strings.Trim(string(line), " "), "/*") {
+		if strings.HasPrefix(strings.TrimSpace(string(line)), "/*") {
 			comment = true
 		}
 
@@ -168,9 +181,9 @@ func (r *retag) retag() {
 			continue
 		}
 
-		if r.needRetag(strings.Trim(string(line), " ")) {
+		if r.needRetag(strings.TrimSpace(string(line))) {
 			begin = true
-			msgName = strings.Split(string(line), " ")[1]
+			msgName = strings.Fields(string(line))[1]
 			buf.Write(line)
 			buf.WriteString("\n")
 			continue
@@ -184,16 +197,16 @@ func (r *retag) retag() {
 		}
 
 		if begin == true {
-			if strings.HasPrefix(strings.Trim(string(line), " "), "//") {
+			if strings.HasPrefix(strings.TrimSpace(string(line)), "//") {
 				buf.Write(line)
 				buf.WriteString("\n")
 				continue
 			}
 
-			fields := strings.Fields(strings.Trim(string(line), " "))
+			fields := strings.Fields(strings.TrimSpace(string(line)))
 			key := msgName + "." + fields[0]
 			tag := r.tags[key]
-			newline := resetTag(string(line), fields[0], tag)
+			newline := resetTag(string(line), fields[0], tag, r.fieldMaxLen, r.tagMaxLen)
 			buf.WriteString(newline)
 			buf.WriteString("\n")
 			continue
@@ -218,7 +231,7 @@ func (r *retag) needRetag(line string) bool {
 
 	return false
 }
-func resetTag(line string, field string, tag string) string {
+func resetTag(line string, field string, tag string, maxlenField, maxlenTag int) string {
 	//reset default json
 	res := strings.Trim(strings.TrimRight(strings.TrimRight(line, "\n"), " "), "`")
 	if strings.Contains(line, "json:") && strings.Contains(tag, "json:") {
@@ -226,7 +239,31 @@ func resetTag(line string, field string, tag string) string {
 		res = strings.Replace(res, substr, "", -1)
 	}
 
-	res += " " + tag + "`"
+	fs := strings.Fields(res)
+	for i := 2; i < len(fs); i++ {
+		if i == 2 {
+			res = strings.Replace(res, fs[i], "`", -1)
+			fs[i] = fs[i][1:]
+		} else {
+			res = strings.Replace(res, fs[i], "", -1)
+		}
+	}
+
+	fs = append(fs, strings.Fields(tag)...)
+
+	for i := 2; i < len(fs); i++ {
+		if i == 2 {
+			format := "%-" + strconv.Itoa(len(`protobuf:"bytes,xxx,opt,name=`)+maxlenField) + "s  "
+			res += fmt.Sprintf(format, fs[i])
+		} else if i != len(fs)-1 {
+			format := "%-" + strconv.Itoa(len(fs[i])-len(strings.Trim(strings.Split(fs[i], ":")[1], "\""))+maxlenTag) + "s  "
+			res += fmt.Sprintf(format, fs[i])
+		} else {
+			res += fs[i]
+		}
+	}
+
+	res += "`"
 
 	return res
 }

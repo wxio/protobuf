@@ -52,6 +52,7 @@ func (r *retag) getStructTags(filename string) {
 
 	r.tags = make(map[string]string)
 	var begin bool
+	var oneof bool
 	var comment bool
 	var msgName string
 	reader := bufio.NewReader(file)
@@ -74,9 +75,19 @@ func (r *retag) getStructTags(filename string) {
 			continue
 		}
 
+		if strings.HasPrefix(strings.TrimSpace(string(line)), "oneof") {
+			oneof = true
+			continue
+		}
+
 		if strings.HasPrefix(strings.TrimSpace(string(line)), "message") {
 			begin = true
 			msgName = strings.Fields(string(line))[1]
+			continue
+		}
+
+		if oneof == true && strings.TrimSpace(string(line))[0] == '}' {
+			oneof = false
 			continue
 		}
 

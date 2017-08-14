@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -118,28 +119,19 @@ func (r *retag) getStructTags(filename string) {
 	}
 }
 
+var reFnT *regexp.Regexp = regexp.MustCompile(`^\s*[^\s]*\s*([^\s]+)\s*([^\s]+)\s*=\s*\d+\s*;\s*(//.*(json:"[^"]+").*)?`)
+
 func getFieldTag(line string, msgName string) (field string, tag string) {
-	fts := strings.Split(line, "//")
-	tag = fts[1]
-	fs := strings.Fields(fts[0])
-	fsl := len(fs)
-	field = msgName + "."
-	for i := 0; i < fsl; i++ {
-		if i == fsl-1 {
-			field += fs[i]
-			break
-		} else {
-			if fs[i+1] == "=" {
-				field += fs[i]
-				break
-			}
-		}
+	m := reFnT.FindAllStringSubmatch(line, 4)
+	if len(m) < 1 {
+		fmt.Fprintf(os.Stderr, "******\n\n\n%s\n\n\n****\n", line)
 	}
-
-	tag = strings.TrimSpace(tag)
-	tag = strings.Trim(tag, "`")
-	tag = trimInside(tag)
-
+	field = msgName + "." + m[0][2]
+	if m[0][4] != "" {
+		tag = m[0][4]
+	} else {
+		tag = fmt.Sprintf(`json:"%s"`, m[0][2])
+	}
 	return
 }
 

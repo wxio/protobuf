@@ -119,7 +119,7 @@ func (r *retag) getStructTags(filename string) {
 	}
 }
 
-var reFnT *regexp.Regexp = regexp.MustCompile(`^\s*[^\s]*\s*([^\s]+)\s*([^\s]+)\s*=\s*\d+\s*;\s*(//.*(json:"[^"]+").*)?`)
+var reFnT *regexp.Regexp = regexp.MustCompile(`^\s*(?:repeated)?\s*(map<[^>]+>|[^\s]+)\s*([^\s]+)\s*=\s*\d+\s*;\s*(//.*(json:"[^"]+").*)?`)
 
 func getFieldTag(line string, msgName string) (field string, tag string) {
 	m := reFnT.FindAllStringSubmatch(line, 4)
@@ -130,8 +130,10 @@ func getFieldTag(line string, msgName string) (field string, tag string) {
 	if m[0][4] != "" {
 		tag = m[0][4]
 	} else {
+		// fmt.Fprintf(os.Stderr, "no match %v %v\n", m, line)
 		tag = fmt.Sprintf(`json:"%s"`, m[0][2])
 	}
+	// fmt.Fprintf(os.Stderr, "2. field %v  tag %v\n", field, tag)
 	return
 }
 

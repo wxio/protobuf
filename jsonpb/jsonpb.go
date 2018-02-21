@@ -50,6 +50,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/glog"
+
 	"github.com/golang/protobuf/proto"
 )
 
@@ -253,6 +255,7 @@ func (m *Marshaler) marshalObject(out *errWriter, v proto.Message, indent, typeU
 			value := reflect.ValueOf(ext)
 			var prop proto.Properties
 			prop.Parse(desc.Tag)
+			glog.Warningf("desc %#+v", desc)
 			prop.JSONName = fmt.Sprintf("[%s]", desc.Name)
 			if !firstField {
 				m.writeSep(out)
@@ -656,9 +659,9 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 			return err
 		}
 
-		consumeField := func(prop *proto.Properties) (json.RawMessage, bool) {
+		consumeField := func(prop *proto.Properties, jtag string) (json.RawMessage, bool) {
 			// Be liberal in what names we accept; both orig_name and camelName are okay.
-			fieldNames := acceptedJSONFieldNames(prop)
+			fieldNames := acceptedJSONFieldNames(prop, jtag)
 
 			vOrig, okOrig := jsonFields[fieldNames.orig]
 			vCamel, okCamel := jsonFields[fieldNames.camel]
@@ -685,7 +688,8 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 				continue
 			}
 
-			valueForField, ok := consumeField(sprops.Prop[i])
+			jtag := ft.Tag.Get("json")
+			valueForField, ok := consumeField(sprops.Prop[i], jtag)
 			if !ok {
 				continue
 			}
@@ -697,7 +701,7 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 		// Check for any oneof fields.
 		if len(jsonFields) > 0 {
 			for _, oop := range sprops.OneofTypes {
-				raw, ok := consumeField(oop.Prop)
+				raw, ok := consumeField(oop.Prop, "")
 				if !ok {
 					continue
 				}
@@ -713,7 +717,8 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 			var f string
 			for fname := range jsonFields {
 				f = fname
-				break
+				glog.Warningf("field %s", fname)
+				// break
 			}
 			return fmt.Errorf("unknown field %q in %v", f, targetType)
 		}
@@ -788,6 +793,17 @@ func (u *Unmarshaler) unmarshalValue(target reflect.Value, inputValue json.RawMe
 func jsonProperties(f reflect.StructField, origName bool) *proto.Properties {
 	var prop proto.Properties
 	prop.Init(f.Type, f.Name, f.Tag.Get("protobuf"), &f)
+	jtag := f.Tag.Get("json")
+	glog.Warningf("json tag '%s'", jtag)
+	if jtag != "" {
+		prop.JSONName = jtag
+	}
+	// 	jname := jtag[len("json:\"") : len(jtag)-1]
+	// 	if jname != "-" {
+	// 		prop.JSONName = jname
+	// 		glog.Warningf("jname %s", jname)
+	// 	}
+	// }
 	if origName || prop.JSONName == "" {
 		prop.JSONName = prop.OrigName
 	}
@@ -798,9 +814,11 @@ type fieldNames struct {
 	orig, camel string
 }
 
-func acceptedJSONFieldNames(prop *proto.Properties) fieldNames {
+func acceptedJSONFieldNames(prop *proto.Properties, jtag string) fieldNames {
 	opts := fieldNames{orig: prop.OrigName, camel: prop.OrigName}
-	if prop.JSONName != "" {
+	if jtag != "" {
+		opts.camel = jtag
+	} else if prop.JSONName != "" {
 		opts.camel = prop.JSONName
 	}
 	return opts

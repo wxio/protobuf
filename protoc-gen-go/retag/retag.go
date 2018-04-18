@@ -123,12 +123,12 @@ func (r *retag) getStructTags(filename string) {
 	}
 }
 
-var reFnT *regexp.Regexp = regexp.MustCompile(`^\s*(?:repeated)?\s*(map<[^>]+>|[^\s]+)\s*([^\s]+)\s*=\s*\d+\s*;\s*(//.*(json:"[^"]+").*)?`)
+var reFnT *regexp.Regexp = regexp.MustCompile(`^\s*(?:repeated|optional)?\s*(map<[^>]+>|[^\s]+)\s*([^\s]+)\s*=\s*\d+\s*(?:[[][^\]]+[\]])?\s*;\s*(//.*(json:"[^"]+").*)?`)
 
 func getFieldTag(line string, msgName string) (field string, tag string) {
 	m := reFnT.FindAllStringSubmatch(line, 4)
 	if len(m) < 1 {
-		fmt.Fprintf(os.Stderr, "******\n\n\n%s\n\n\n****\n", line)
+		fmt.Fprintf(os.Stderr, "******\n\n\n%s\n%v\n\n****\n", line, m)
 	}
 	field = msgName + "." + m[0][2]
 	if m[0][4] != "" {
